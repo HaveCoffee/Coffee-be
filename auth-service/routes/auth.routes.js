@@ -4,16 +4,12 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/auth.controller');
 
-// Initial signup and mobile OTP request
-router.post('/signup', authController.signup);
+// Signup Flow
+router.post('/signup/initiate', authController.initiateSignup);
+router.post('/signup/complete', authController.completeSignup);
 
-// Verify mobile OTP and send email OTP
-router.post('/verify-mobile', authController.verifyMobile);
-
-// Verify email OTP and set final password
-router.post('/complete-signup', authController.completeSignup);
-
-// User login and JWT generation
-router.post('/login', authController.login);
+// Login Flow
+router.post('/login/initiate', authController.initiateLogin);
+router.post('/login/complete', authController.completeLogin);
 
 module.exports = router;

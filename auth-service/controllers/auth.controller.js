@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const twilio = require('twilio');
+const crypto = require('crypto');
 const db = require('../db');
 const path = require('path');
 
@@ -11,6 +12,13 @@ require('dotenv').config({
 // Initialize Twilio Client
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 const serviceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
+
+/**
+ * HELPER: Generate random user_id
+ */
+const generateUserId = () => {
+  return crypto.randomBytes(16).toString('hex');
+};
 
 /**
  * HELPER: Send OTP via Twilio Verify
@@ -41,9 +49,12 @@ exports.initiateSignup = async (req, res) => {
 
   try {
     // Check if user already exists
-    const userCheck = await db.query('SELECT * FROM Users WHERE mobile_number = $1', [mobileNumber]);
+    const userCheck = await db.query('SELECT user_id, mobile_number FROM Users WHERE mobile_number = $1', [mobileNumber]);
     if (userCheck.rows.length > 0) {
-      return res.status(409).json({ message: 'User already exists. Please login.' });
+      return res.status(409).json({ 
+        message: 'User already exists. Please login.',
+        error: 'USER_ALREADY_EXISTS'
+      });
     }
 
     // Send OTP
@@ -58,12 +69,21 @@ exports.initiateSignup = async (req, res) => {
 
 /**
  * 2. SIGNUP FLOW - COMPLETE
- * Verify OTP -> Hash Password -> Save to DB
+ * Verify OTP -> Hash Password -> Generate user_id -> Save to DB
  */
 exports.completeSignup = async (req, res) => {
   const { mobileNumber, otp, password } = req.body;
 
   try {
+    // Check if user already exists (double check)
+    const existingUser = await db.query('SELECT user_id FROM Users WHERE mobile_number = $1', [mobileNumber]);
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ 
+        message: 'User already exists. Please login.',
+        error: 'USER_ALREADY_EXISTS'
+      });
+    }
+
     // 1. Verify OTP
     const isOtpValid = await verifyOtpHelper(mobileNumber, otp);
     if (!isOtpValid) {
@@ -74,37 +94,69 @@ exports.completeSignup = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 3. Save User
-    await db.query(
-      'INSERT INTO Users (mobile_number, password) VALUES ($1, $2)',
-      [mobileNumber, hashedPassword]
+    // 3. Generate unique user_id
+    let userId = generateUserId();
+    let userIdExists = true;
+    
+    // Ensure user_id is unique (very unlikely but check anyway)
+    while (userIdExists) {
+      const checkUserId = await db.query('SELECT user_id FROM Users WHERE user_id = $1', [userId]);
+      if (checkUserId.rows.length === 0) {
+        userIdExists = false;
+      } else {
+        userId = generateUserId();
+      }
+    }
+
+    // 4. Save User with user_id
+    const result = await db.query(
+      'INSERT INTO Users (user_id, mobile_number, password) VALUES ($1, $2, $3) RETURNING user_id, mobile_number',
+      [userId, mobileNumber, hashedPassword]
     );
 
-    res.status(201).json({ message: 'User registered and onboarded successfully.' });
+    res.status(201).json({ 
+      message: 'User registered and onboarded successfully.',
+      user_id: result.rows[0].user_id,
+      mobile_number: result.rows[0].mobile_number
+    });
 
   } catch (error) {
     console.error(error);
+    
+    // Handle unique constraint violation
+    if (error.code === '23505') { // PostgreSQL unique violation
+      return res.status(409).json({ 
+        message: 'User already exists. Please login.',
+        error: 'USER_ALREADY_EXISTS'
+      });
+    }
+    
     res.status(500).json({ message: 'Signup failed', error: error.message });
   }
 };
 
 /**
  * 3. LOGIN FLOW - INITIATE
- * Check if user exists -> Send OTP
+ * Check if user exists -> Fetch user_id -> Send OTP
  */
 exports.initiateLogin = async (req, res) => {
   const { mobileNumber } = req.body;
 
   try {
-    // Check if user exists
-    const userCheck = await db.query('SELECT * FROM Users WHERE mobile_number = $1', [mobileNumber]);
+    // Check if user exists and fetch user_id
+    const userCheck = await db.query('SELECT user_id, mobile_number FROM Users WHERE mobile_number = $1', [mobileNumber]);
     if (userCheck.rows.length === 0) {
       return res.status(404).json({ message: 'User not found. Please signup.' });
     }
 
+    const user = userCheck.rows[0];
+
     // Send OTP (2FA Step 1)
     await sendOtpHelper(mobileNumber);
-    res.status(200).json({ message: 'OTP sent. Please verify to proceed to password entry.' });
+    res.status(200).json({ 
+      message: 'OTP sent. Please verify to proceed to password entry.',
+      user_id: user.user_id
+    });
 
   } catch (error) {
     console.error(error);
@@ -114,7 +166,7 @@ exports.initiateLogin = async (req, res) => {
 
 /**
  * 4. LOGIN FLOW - COMPLETE
- * Verify OTP -> Verify Password -> Issue JWT
+ * Verify OTP -> Verify Password -> Issue JWT -> Return user_id
  */
 exports.completeLogin = async (req, res) => {
   const { mobileNumber, otp, password } = req.body;
@@ -127,7 +179,7 @@ exports.completeLogin = async (req, res) => {
     }
 
     // 2. Fetch User
-    const result = await db.query('SELECT * FROM Users WHERE mobile_number = $1', [mobileNumber]);
+    const result = await db.query('SELECT user_id, mobile_number, password FROM Users WHERE mobile_number = $1', [mobileNumber]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'User not found.' });
     }
@@ -141,13 +193,17 @@ exports.completeLogin = async (req, res) => {
 
     // 4. Issue JWT
     const token = jwt.sign(
-      { mobileNumber: user.mobile_number },
+      { 
+        user_id: user.user_id,
+        mobileNumber: user.mobile_number 
+      },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
 
     res.status(200).json({
-      message: 'Login successful.',
+      message: 'Successfully logged in',
+      user_id: user.user_id,
       token: token
     });
 
