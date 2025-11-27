@@ -2,10 +2,12 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./config/swagger');
 
 require('dotenv').config({
     path: path.resolve(__dirname, '..', '.env')
-});;
+});
 
 // Import Controller and Middleware
 const authController = require('./controllers/auth.controller');
@@ -18,25 +20,192 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Authentication API Documentation'
+}));
+
+// API Info endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Authentication Service API',
+    version: '1.0.0',
+    documentation: '/api-docs'
+  });
+});
+
 // --- ROUTES ---
 
-// 1. Signup Routes
-// POST: { "mobileNumber": "+1234567890" }
+/**
+ * @swagger
+ * /api/auth/signup/init:
+ *   post:
+ *     summary: Initiate signup process
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/SignupInitiateRequest'
+ *     responses:
+ *       200:
+ *         description: OTP sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: OTP sent successfully for signup.
+ *       409:
+ *         description: User already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Server error
+ */
 app.post('/api/auth/signup/init', authController.initiateSignup);
 
-// POST: { "mobileNumber": "+1234567890", "otp": "123456", "password": "mypassword" }
+/**
+ * @swagger
+ * /api/auth/signup/verify:
+ *   post:
+ *     summary: Complete signup by verifying OTP and setting password
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/SignupCompleteRequest'
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SignupCompleteResponse'
+ *       400:
+ *         description: Invalid OTP
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       409:
+ *         description: User already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Server error
+ */
 app.post('/api/auth/signup/verify', authController.completeSignup);
 
-
-// 2. Login Routes
-// POST: { "mobileNumber": "+1234567890" }
+/**
+ * @swagger
+ * /api/auth/login/init:
+ *   post:
+ *     summary: Initiate login process
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginInitiateRequest'
+ *     responses:
+ *       200:
+ *         description: OTP sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LoginInitiateResponse'
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Server error
+ */
 app.post('/api/auth/login/init', authController.initiateLogin);
 
-// POST: { "mobileNumber": "+1234567890", "otp": "123456", "password": "mypassword" }
+/**
+ * @swagger
+ * /api/auth/login/verify:
+ *   post:
+ *     summary: Complete login by verifying OTP and password
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginCompleteRequest'
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LoginCompleteResponse'
+ *       400:
+ *         description: Invalid OTP
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Invalid password
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Server error
+ */
 app.post('/api/auth/login/verify', authController.completeLogin);
 
-
-// 3. Protected Route Example
+/**
+ * @swagger
+ * /api/profile:
+ *   get:
+ *     summary: Get user profile (Protected route)
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 app.get('/api/profile', verifyToken, (req, res) => {
   res.json({
     message: 'This is a protected route',
@@ -44,8 +213,8 @@ app.get('/api/profile', verifyToken, (req, res) => {
   });
 });
 
-
 // Start Server
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Swagger documentation available at http://localhost:${PORT}/api-docs`);
 });
