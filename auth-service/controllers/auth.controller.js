@@ -51,7 +51,7 @@ exports.initiateSignup = async (req, res) => {
     // Check if user already exists
     const userCheck = await db.query('SELECT user_id, mobile_number FROM Users WHERE mobile_number = $1', [mobileNumber]);
     if (userCheck.rows.length > 0) {
-      return res.status(409).json({ 
+      return res.status(409).json({
         message: 'User already exists. Please login.',
         error: 'USER_ALREADY_EXISTS'
       });
@@ -72,7 +72,7 @@ exports.initiateSignup = async (req, res) => {
  * Verify OTP -> Hash Password -> Generate user_id -> Save to DB
  */
 exports.completeSignup = async (req, res) => {
-  const { mobileNumber, otp, password } = req.body;
+  const { mobileNumber, otp } = req.body;
 
   try {
     // Check if user already exists (double check)
@@ -91,8 +91,8 @@ exports.completeSignup = async (req, res) => {
     }
 
     // 2. Hash Password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+//    const salt = await bcrypt.genSalt(10);
+//    const hashedPassword = await bcrypt.hash(password, salt);
 
     // 3. Generate unique user_id
     let userId = generateUserId();
@@ -110,8 +110,8 @@ exports.completeSignup = async (req, res) => {
 
     // 4. Save User with user_id
     const result = await db.query(
-      'INSERT INTO Users (user_id, mobile_number, password) VALUES ($1, $2, $3) RETURNING user_id, mobile_number',
-      [userId, mobileNumber, hashedPassword]
+      'INSERT INTO Users (user_id, mobile_number) VALUES ($1, $2) RETURNING user_id, mobile_number',
+      [userId, mobileNumber]
     );
 
     res.status(201).json({ 
@@ -169,7 +169,7 @@ exports.initiateLogin = async (req, res) => {
  * Verify OTP -> Verify Password -> Issue JWT -> Return user_id
  */
 exports.completeLogin = async (req, res) => {
-  const { mobileNumber, otp, password } = req.body;
+  const { mobileNumber, otp } = req.body;
 
   try {
     // 1. Verify OTP
@@ -179,17 +179,17 @@ exports.completeLogin = async (req, res) => {
     }
 
     // 2. Fetch User
-    const result = await db.query('SELECT user_id, mobile_number, password FROM Users WHERE mobile_number = $1', [mobileNumber]);
+    const result = await db.query('SELECT user_id, mobile_number FROM Users WHERE mobile_number = $1', [mobileNumber]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'User not found.' });
     }
     const user = result.rows[0];
 
     // 3. Verify Password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid password.' });
-    }
+//    const isPasswordValid = await bcrypt.compare(password, user.password);
+//    if (!isPasswordValid) {
+//      return res.status(401).json({ message: 'Invalid password.' });
+//    }
 
     // 4. Issue JWT
     const token = jwt.sign(
