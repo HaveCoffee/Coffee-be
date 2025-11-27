@@ -60,7 +60,7 @@ const options = {
         },
         SignupCompleteRequest: {
           type: 'object',
-          required: ['mobileNumber', 'otp', 'password'],
+          required: ['mobileNumber', 'otp'],
           properties: {
             mobileNumber: {
               type: 'string',
@@ -70,13 +70,13 @@ const options = {
               type: 'string',
               example: '123456',
               description: '6-digit OTP received via SMS'
-            },
-            password: {
-              type: 'string',
-              example: 'securePass123',
-              minLength: 6,
-              description: 'Password (minimum 6 characters)'
             }
+//            ,password: {
+//              type: 'string',
+//              example: 'securePass123',
+//              minLength: 6,
+//              description: 'Password (minimum 6 characters)'
+//            }
           }
         },
         SignupCompleteResponse: {
@@ -121,7 +121,7 @@ const options = {
         },
         LoginCompleteRequest: {
           type: 'object',
-          required: ['mobileNumber', 'otp', 'password'],
+          required: ['mobileNumber', 'otp'],
           properties: {
             mobileNumber: {
               type: 'string',
@@ -130,11 +130,12 @@ const options = {
             otp: {
               type: 'string',
               example: '123456'
-            },
-            password: {
-              type: 'string',
-              example: 'securePass123'
             }
+//            ,
+//            password: {
+//              type: 'string',
+//              example: 'securePass123'
+//            }
           }
         },
         LoginCompleteResponse: {
