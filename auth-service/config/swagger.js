@@ -11,7 +11,7 @@ const options = {
       description: 'API documentation for Social Media App Authentication Service',
       contact: {
         name: 'API Support',
-        email: 'support@example.com'
+        email: 'hello@havecoffee.in'
       }
     },
     servers: [
@@ -20,7 +20,7 @@ const options = {
         description: 'Development server'
       },
       {
-        url: 'https://api.example.com',
+        url: 'https://auth.havecoffee.in',
         description: 'Production server'
       }
     ],
@@ -170,3 +170,4 @@ const options = {
 const swaggerSpec = swaggerJsdoc(options);
 
 module.exports = swaggerSpec;
+
