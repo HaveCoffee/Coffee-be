@@ -6,16 +6,28 @@ require('dotenv').config({
 });;
 
 // Create a new pool instance to manage connections
-const pool = new Pool({
+const isProduction = process.env.NODE_ENV === 'production';
+
+const poolConfig = {
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
   database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
-//  ssl:{
-//    rejectUnauthorized: false
-//  }
-});
+  password: process.env.DB_PASSWORD || process.env.DB_PASS,
+  port: parseInt(process.env.DB_PORT) || 5432,
+  max: 20, // Maximum number of clients in the pool
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+};
+
+// Add SSL configuration for AWS RDS in production
+if (isProduction) {
+  poolConfig.ssl = {
+    require: true,
+    rejectUnauthorized: false // Set to true if you have proper SSL certificates
+  };
+}
+
+const pool = new Pool(poolConfig);
 
 pool.on('connect', () => {
   console.log('Connected to the PostgreSQL database');

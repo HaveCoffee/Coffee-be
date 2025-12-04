@@ -20,9 +20,11 @@ const API_VERSION = '/api/v1';
 // Initialize Socket.io Server
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allow all origins for simplicity in this example
-        methods: ["GET", "POST"]
-    }
+        origin: config.CORS_ORIGIN,
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    transports: ['websocket', 'polling']
 });
 
 // --- Middleware ---
@@ -34,15 +36,49 @@ app.use(API_VERSION + '/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customSiteTitle: 'Chat Service API Documentation'
 }));
 
-console.log(`Swagger Docs available at: http://localhost:${PORT}${API_VERSION}/docs`);
+if (!config.isProduction) {
+  console.log(`Swagger Docs available at: http://localhost:${PORT}${API_VERSION}/docs`);
+}
 
 // API Info endpoint
 app.get('/', (req, res) => {
   res.json({
     message: 'Chat Service API',
     version: '1.0.0',
-    documentation: `${API_VERSION}/docs`
+    documentation: `${API_VERSION}/docs`,
+    environment: config.NODE_ENV
   });
+});
+
+// Health check endpoint for load balancer
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    service: 'chat-service',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Readiness check endpoint
+app.get('/ready', async (req, res) => {
+  try {
+    const { sequelize } = require('./models/db_models');
+    await sequelize.authenticate();
+    res.status(200).json({
+      status: 'ready',
+      service: 'chat-service',
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'not ready',
+      service: 'chat-service',
+      database: 'disconnected',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // --- REST Endpoints ---
@@ -221,6 +257,7 @@ io.use(async (socket, next) => {
 
     try {
         console.log("Socket Auth: Verifying token...");
+        console.log("Socket Auth: JWT_SECRET configured:", config.JWT_SECRET ? "Yes (length: " + config.JWT_SECRET.length + ")" : "No");
         const decoded = jwt.verify(token, config.JWT_SECRET);
         console.log("Socket Auth: Token decoded successfully. Payload:", decoded);
         
@@ -236,9 +273,20 @@ io.use(async (socket, next) => {
 
         // Find or create user by user_id (auto-sync from auth service)
         console.log(`Socket Auth: Looking up user with user_id: ${userId}`);
+        
+        // Check if database is connected
+        const { sequelize } = require('./models/db_models');
+        try {
+            await sequelize.authenticate();
+            console.log('Socket Auth: Database connection verified');
+        } catch (dbConnError) {
+            console.error('Socket Auth Error: Database not connected:', dbConnError.message);
+            return next(new Error("Authentication error: Database connection failed."));
+        }
+        
         let user, created;
         try {
-            [user, created] = await User.findOrCreate({
+            const result = await User.findOrCreate({
                 where: { user_id: userId },
                 defaults: {
                     user_id: userId,
@@ -246,16 +294,24 @@ io.use(async (socket, next) => {
                     name: null
                 }
             });
-            console.log(`Socket Auth: findOrCreate completed. user:`, user ? user.user_id : 'null', 'created:', created);
+            user = result[0];
+            created = result[1];
+            console.log(`Socket Auth: findOrCreate completed. user:`, user ? (user.user_id || user.get('user_id')) : 'null', 'created:', created);
         } catch (dbError) {
             console.error(`Socket Auth Error: Database error during findOrCreate:`, dbError);
+            console.error(`Socket Auth Error: Full error:`, JSON.stringify(dbError, null, 2));
             // Try to find user without creating
-            user = await User.findByPk(userId);
-            if (!user) {
-                console.error(`Socket Auth Error: User not found and could not be created. userId: ${userId}`);
-                return next(new Error("Authentication error: User record not found."));
+            try {
+                user = await User.findByPk(userId);
+                if (!user) {
+                    console.error(`Socket Auth Error: User not found and could not be created. userId: ${userId}`);
+                    return next(new Error("Authentication error: User record not found."));
+                }
+                created = false;
+            } catch (findError) {
+                console.error(`Socket Auth Error: Error finding user:`, findError);
+                return next(new Error("Authentication error: Database query failed."));
             }
-            created = false;
         }
 
         if (created) {
@@ -367,8 +423,11 @@ io.on('connection', (socket) => {
 
 // Start the database connection and then the server
 connectDB().then(() => {
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0', () => {
         console.log(`Server is running on port ${PORT}`);
-        console.log(`Swagger documentation available at http://localhost:${PORT}${API_VERSION}/docs`);
+        if (!config.isProduction) {
+          console.log(`Swagger documentation available at http://localhost:${PORT}${API_VERSION}/docs`);
+        }
+        console.log(`✅ Chat Service running on port ${PORT} (${config.NODE_ENV} mode)`);
     });
 });

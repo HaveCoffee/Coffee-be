@@ -17,7 +17,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Global Middleware
-app.use(cors());
+const isProduction = process.env.NODE_ENV === 'production';
+const corsOptions = {
+  origin: isProduction ? (process.env.CORS_ORIGIN || process.env.FRONTEND_URL) : '*',
+  credentials: true
+};
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 // Swagger Documentation
@@ -213,8 +218,42 @@ app.get('/api/profile', verifyToken, (req, res) => {
   });
 });
 
+// Health check endpoint for load balancer
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    service: 'auth-service',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Readiness check endpoint
+app.get('/ready', async (req, res) => {
+  try {
+    const db = require('./db');
+    await db.query('SELECT 1');
+    res.status(200).json({
+      status: 'ready',
+      service: 'auth-service',
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'not ready',
+      service: 'auth-service',
+      database: 'disconnected',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Start Server
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Swagger documentation available at http://localhost:${PORT}/api-docs`);
+app.listen(PORT, '0.0.0.0', () => {
+  const env = process.env.NODE_ENV || 'development';
+  console.log(`✅ Auth Service running on port ${PORT} (${env} mode)`);
+  if (!isProduction) {
+    console.log(`Swagger documentation available at http://localhost:${PORT}/api-docs`);
+  }
 });

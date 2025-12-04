@@ -2,12 +2,27 @@ const { Sequelize, DataTypes } = require('sequelize');
 const config = require('../config/config');
 
 // Initialize Sequelize with Postgres credentials
-const sequelize = new Sequelize(config.DB_NAME, config.DB_USER, config.DB_PASS, {
+const sequelizeConfig = {
     host: config.DB_HOST,
     port: config.DB_PORT,
     dialect: config.DB_DIALECT,
-    logging: false // Set to console.log to see SQL queries
-});
+    logging: config.ENABLE_SQL_LOGGING ? console.log : false,
+    pool: {
+        max: 10,
+        min: 0,
+        acquire: 30000,
+        idle: 10000
+    }
+};
+
+// Add SSL configuration for AWS RDS in production
+if (config.DB_SSL) {
+    sequelizeConfig.dialectOptions = {
+        ssl: config.DB_SSL
+    };
+}
+
+const sequelize = new Sequelize(config.DB_NAME, config.DB_USER, config.DB_PASS, sequelizeConfig);
 
 const User = sequelize.define('User', {
     // Primary key: Must match your external table's primary key
