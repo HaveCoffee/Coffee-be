@@ -194,7 +194,7 @@ exports.completeLogin = async (req, res) => {
     // 4. Issue JWT
     const token = jwt.sign(
       { 
-        user_id: user.user_id,
+        userId: user.user_id, 
         mobileNumber: user.mobile_number 
       },
       process.env.JWT_SECRET,

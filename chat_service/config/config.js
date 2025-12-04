@@ -1,15 +1,14 @@
 require('dotenv').config();
 
 const config = {
-    // Server
-    PORT: process.env.PORT || 3000,
+    // Server - Use port 3001 for chat service
+    PORT: process.env.PORT || 3001,
 
     // JWT/Auth Configuration
-    JWT_SECRET: process.env.JWT_SECRET || 'your_super_secret_key_change_me_in_prod',
-    // The user ID will be the subject ('sub') of the token payload
+    JWT_SECRET: process.env.JWT_SECRET || 'SUPER_SECRET_KEY_FOR_JWT_SIGNING',
     TOKEN_USER_ID_FIELD: 'userId', 
 
-    // PostgreSQL Database Configuration (Replace with your AWS RDS credentials)
+    // PostgreSQL Database Configuration
     DB_NAME: process.env.DB_NAME || 'coffee_dev',
     DB_USER: process.env.DB_USER || 'riagrawa2401',
     DB_PASS: process.env.DB_PASS || 'dev_123',

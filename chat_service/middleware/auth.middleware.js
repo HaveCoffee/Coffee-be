@@ -17,31 +17,49 @@ const verifyToken = async (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, config.JWT_SECRET);
-
-        const userId = decoded[config.TOKEN_USER_ID_FIELD];
+        const userId = decoded[config.TOKEN_USER_ID_FIELD] || decoded.user_id || decoded.userId;
 
         if (!userId) {
-            return res.status(401).json({ message: 'Invalid Token: User ID missing from payload.' });
+            console.error('Token payload:', decoded);
+            return res.status(401).json({ 
+                message: 'Invalid Token: User ID missing from payload.',
+                debug: { tokenPayload: decoded }
+            });
         }
+        
         req.user = { userId };
-
         const user = await User.findByPk(userId);
+        
         if (!user) {
-            return res.status(404).json({ message: 'User not found in database.' });
+            console.error('User not found in chat_service database. userId:', userId);
+            return res.status(404).json({ 
+                message: 'User not found in database.',
+                debug: { userId: userId }
+            });
         }
 
         req.user.profile = user;
-
         next();
+        
     } catch (error) {
+        console.error('JWT Verification Error:', {
+            name: error.name,
+            message: error.message,
+        });
+        
         if (error.name === 'TokenExpiredError') {
             return res.status(401).json({ message: 'Access Denied: Token has expired.' });
         }
         if (error.name === 'JsonWebTokenError') {
-            return res.status(401).json({ message: 'Access Denied: Invalid token signature.' });
+            return res.status(401).json({ 
+                message: 'Access Denied: Invalid token signature.',
+                hint: 'JWT_SECRET might not match between services. Check both .env files.'
+            });
         }
-        console.error("JWT Verification Error:", error);
-        return res.status(500).json({ message: 'Authentication process failed.' });
+        return res.status(500).json({ 
+            message: 'Authentication process failed.',
+            error: error.message
+        });
     }
 };
 

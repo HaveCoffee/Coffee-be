@@ -220,20 +220,67 @@ io.use(async (socket, next) => {
     }
 
     try {
+        console.log("Socket Auth: Verifying token...");
         const decoded = jwt.verify(token, config.JWT_SECRET);
-        const userId = decoded[config.TOKEN_USER_ID_FIELD]; // Use the new field name
+        console.log("Socket Auth: Token decoded successfully. Payload:", decoded);
+        
+        const userId = decoded[config.TOKEN_USER_ID_FIELD] || decoded.user_id || decoded.userId;
+        const mobileNumber = decoded.mobileNumber || decoded.mobile_number;
 
-        // Find user by user_id
-        const user = await User.findByPk(userId);
+        console.log(`Socket Auth: Extracted userId: ${userId}, mobileNumber: ${mobileNumber}`);
+
+        if (!userId) {
+            console.error("Socket Auth Error: User ID missing from token. Token payload:", decoded);
+            return next(new Error("Authentication error: User ID missing from token."));
+        }
+
+        // Find or create user by user_id (auto-sync from auth service)
+        console.log(`Socket Auth: Looking up user with user_id: ${userId}`);
+        let user, created;
+        try {
+            [user, created] = await User.findOrCreate({
+                where: { user_id: userId },
+                defaults: {
+                    user_id: userId,
+                    mobile_number: mobileNumber || 'unknown',
+                    name: null
+                }
+            });
+            console.log(`Socket Auth: findOrCreate completed. user:`, user ? user.user_id : 'null', 'created:', created);
+        } catch (dbError) {
+            console.error(`Socket Auth Error: Database error during findOrCreate:`, dbError);
+            // Try to find user without creating
+            user = await User.findByPk(userId);
+            if (!user) {
+                console.error(`Socket Auth Error: User not found and could not be created. userId: ${userId}`);
+                return next(new Error("Authentication error: User record not found."));
+            }
+            created = false;
+        }
+
+        if (created) {
+            console.log(`Socket Auth: Auto-created user in chat service: ${userId}`);
+        } else {
+            console.log(`Socket Auth: User found in chat service: ${userId}`);
+        }
+
         if (!user) {
+            console.error(`Socket Auth Error: User is null after findOrCreate. userId: ${userId}`);
             return next(new Error("Authentication error: User record not found."));
         }
 
+        console.log(`Socket Auth: User authenticated successfully. userId: ${user.user_id}`);
         // Attach authenticated user info to the socket
-        socket.user = { userId: user.user_id, username: user.username };
+        socket.user = { userId: user.user_id, username: user.name || user.user_id };
         next();
     } catch (error) {
         console.error("Socket Auth Error:", error.message);
+        if (error.name === 'JsonWebTokenError') {
+            return next(new Error("Authentication error: Invalid token signature."));
+        }
+        if (error.name === 'TokenExpiredError') {
+            return next(new Error("Authentication error: Token has expired."));
+        }
         next(new Error("Authentication error: Invalid token."));
     }
 });
@@ -255,11 +302,24 @@ io.on('connection', (socket) => {
         }
 
         try {
-            // Check if receiver exists and is registered (optional but good practice)
-            const receiverExists = await User.findByPk(receiverId);
-            if (!receiverExists) {
-                 return callback && callback({ status: 'error', message: 'Recipient User ID not registered.' });
+            console.log(`Attempting to send message from ${currentUserId} to ${receiverId}`);
+            
+            // Find or create receiver in chat_service DB (auto-sync from auth service)
+            // This ensures users exist in chat_service even if they haven't connected yet
+            const [receiverExists, receiverCreated] = await User.findOrCreate({
+                where: { user_id: receiverId },
+                defaults: {
+                    user_id: receiverId,
+                    mobile_number: 'unknown', // Will be updated when receiver connects
+                    name: null
+                }
+            });
+
+            if (receiverCreated) {
+                console.log(`Auto-created receiver in chat service: ${receiverId}`);
             }
+            
+            console.log(`Receiver found: ${receiverExists.user_id}`);
 
             // Save message to database
             const message = await Message.create({
