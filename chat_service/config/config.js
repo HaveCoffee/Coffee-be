@@ -21,7 +21,7 @@ const config = {
     // Support both DB_PASS and DB_PASSWORD for compatibility
     DB_NAME: process.env.DB_NAME || 'coffee_dev',
     DB_USER: process.env.DB_USER || 'riagrawa2401',
-    DB_PASS: process.env.DB_PASS || 'dev_123',
+    DB_PASS: process.env.DB_PASS || process.env.DB_PASSWORD || 'dev_123',
     DB_HOST: process.env.DB_HOST || 'localhost',
     DB_DIALECT: 'postgres',
     DB_PORT: parseInt(process.env.DB_PORT) || 5432,

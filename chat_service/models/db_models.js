@@ -9,9 +9,20 @@ const sequelizeConfig = {
     logging: config.ENABLE_SQL_LOGGING ? console.log : false,
     pool: {
         max: 10,
-        min: 0,
-        acquire: 30000,
-        idle: 10000
+        min: 2, // Keep minimum connections alive
+        acquire: 60000, // Wait up to 60 seconds to get connection (increased from 30s)
+        idle: 10000, // Close idle connections after 10 seconds
+        evict: 1000, // Check for idle connections every second
+        handleDisconnects: true // Automatically reconnect on disconnect
+    },
+    retry: {
+        max: 3, // Retry failed queries up to 3 times
+        match: [
+            /ETIMEDOUT/,
+            /ECONNREFUSED/,
+            /Connection terminated/,
+            /connection timeout/
+        ]
     }
 };
 

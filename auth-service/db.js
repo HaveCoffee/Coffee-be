@@ -14,9 +14,14 @@ const poolConfig = {
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD || process.env.DB_PASS,
   port: parseInt(process.env.DB_PORT) || 5432,
-  max: 20, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  max: 20, 
+  min: 2, 
+  idleTimeoutMillis: 30000, 
+  connectionTimeoutMillis: 10000, 
+  statement_timeout: 30000, // Query timeout: 30 seconds
+  query_timeout: 30000, // Query timeout: 30 seconds
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000, // Start sending keep-alive after 10 seconds
 };
 
 // Add SSL configuration for AWS RDS in production
@@ -35,9 +40,41 @@ pool.on('connect', () => {
 
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  // Don't exit process on connection errors - let PM2 handle restarts
+  // Only log the error for monitoring
+  if (err.code === '28P01') {
+    console.error('❌ Database authentication failed. Check DB credentials.');
+  } else if (err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED') {
+    console.error('❌ Database connection timeout. Check network and RDS security group.');
+  }
 });
 
+// Enhanced query function with retry logic for connection timeouts
+const queryWithRetry = async (text, params, retries = 2) => {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await pool.query(text, params);
+    } catch (error) {
+      // If it's a connection error and we have retries left, try again
+      if (
+        (error.code === 'ETIMEDOUT' || 
+         error.code === 'ECONNREFUSED' || 
+         error.message.includes('Connection terminated') ||
+         error.message.includes('connection timeout')) &&
+        i < retries
+      ) {
+        console.warn(`Database query failed, retrying (${i + 1}/${retries})...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+        continue;
+      }
+      // If no retries left or different error, throw it
+      throw error;
+    }
+  }
+};
+
 module.exports = {
-  query: (text, params) => pool.query(text, params),
+  query: queryWithRetry,
+  // Also export pool for direct access if needed
+  pool: pool,
 };
