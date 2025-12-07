@@ -18,6 +18,7 @@ const config = {
     TOKEN_USER_ID_FIELD: 'userId', 
 
     // PostgreSQL Database Configuration
+    // Support both DB_PASS and DB_PASSWORD for compatibility
     DB_NAME: process.env.DB_NAME || 'coffee_dev',
     DB_USER: process.env.DB_USER || 'riagrawa2401',
     DB_PASS: process.env.DB_PASS || 'dev_123',
@@ -41,8 +42,14 @@ const config = {
 
 // Validate required production environment variables
 if (isProduction) {
-    const required = ['JWT_SECRET', 'DB_NAME', 'DB_USER', 'DB_PASS', 'DB_HOST'];
+    const required = ['JWT_SECRET', 'DB_NAME', 'DB_USER', 'DB_HOST'];
+    const hasDbPassword = process.env.DB_PASS || process.env.DB_PASSWORD;
+    
     const missing = required.filter(key => !process.env[key]);
+    if (!hasDbPassword) {
+        missing.push('DB_PASS or DB_PASSWORD');
+    }
+    
     if (missing.length > 0) {
         console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
         process.exit(1);
