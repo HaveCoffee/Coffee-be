@@ -13,6 +13,9 @@ require('dotenv').config({
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 const serviceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
 
+// Toggle this to false if you ever want to go back to real Twilio
+const USE_MOCK_OTP = true;
+
 /**
  * HELPER: Generate random user_id
  */
@@ -24,6 +27,11 @@ const generateUserId = () => {
  * HELPER: Send OTP via Twilio Verify
  */
 const sendOtpHelper = async (mobileNumber) => {
+  if (USE_MOCK_OTP) {
+    console.log(`[MOCK OTP] Sent to ${mobileNumber}. Use code: 123456`);
+    return { status: 'pending' };
+  }
+
   return await client.verify.v2
     .services(serviceSid)
     .verifications.create({ to: mobileNumber, channel: 'sms' });
@@ -33,6 +41,12 @@ const sendOtpHelper = async (mobileNumber) => {
  * HELPER: Check OTP via Twilio Verify
  */
 const verifyOtpHelper = async (mobileNumber, code) => {
+  if (USE_MOCK_OTP) {
+    console.log(`[MOCK VERIFY] Checking code ${code} for ${mobileNumber}`);
+    // Accepts 123456 as the universal bypass code
+    return code === '123456';
+  }
+
   const verification = await client.verify.v2
     .services(serviceSid)
     .verificationChecks.create({ to: mobileNumber, code: code });
