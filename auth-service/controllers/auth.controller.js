@@ -63,31 +63,38 @@ const sendOtpHelper = async (mobileNumber) => {
 
 /**
  * HELPER: Check OTP via VerifyNow
- * Modified to match the working cURL format
  */
 const verifyOtpHelper = async (verificationId, code) => {
     try {
         const token = await getVerifyNowToken();
+        const url = `${BASE_URL}/verification/v3/validateOtp`;
 
-        // Matches: .../validateOtp?verificationId=XXXX&code=XXXX
-        const response = await axios.post(`${BASE_URL}/verification/v3/validateOtp`, null, {
+        // Correct Axios GET signature: axios.get(url, config)
+        const response = await axios.get(url, {
             params: {
                 verificationId: verificationId,
                 code: code
             },
             headers: {
-                'authToken': token
+                'authToken': token,
+                'accept': '*/*'
             }
         });
 
-        // SUCCESS response code is 200
+        console.log('Verification Response Data:', response.data);
+
+        // Message Central V3 success check
         if (response.data && response.data.responseCode === 200) {
             return response.data.data.verificationStatus === 'VERIFICATION_COMPLETED';
         }
 
         return false;
     } catch (error) {
-        console.error('Verify OTP API Error Details:', error.response?.data || error.message);
+        console.error('Verify OTP API Error Details:', {
+            status: error.response?.status,
+            data: error.response?.data
+//            requestedUrl: error.config?.url + '?' + new URLSearchParams(error.config?.params).toString()
+        });
         throw error;
     }
 };
