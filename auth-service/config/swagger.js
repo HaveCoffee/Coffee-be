@@ -8,7 +8,7 @@ const options = {
     info: {
       title: 'Authentication Service API',
       version: '1.0.0',
-      description: 'API documentation for Social Media App Authentication Service',
+      description: 'API documentation for Coffee App Auth Service using Message Central OTP',
       contact: {
         name: 'API Support',
         email: 'hello@havecoffee.in'
@@ -16,8 +16,12 @@ const options = {
     },
     servers: [
       {
-        url: process.env.SWAGGER_SERVER_URL || 'http://localhost:3000',
-        description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server'
+        url: 'http://3.110.104.45:3000',
+        description: 'AWS Production Server'
+      },
+      {
+        url: 'http://localhost:3000',
+        description: 'Local Development Server'
       }
     ],
     components: {
@@ -26,144 +30,67 @@ const options = {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Enter JWT token'
+          description: 'Standard JWT Authorization header'
+        },
+        messageCentralToken: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'authToken',
+          description: 'Message Central token required for signup verification'
         }
       },
       schemas: {
         Error: {
           type: 'object',
           properties: {
-            message: {
-              type: 'string',
-              example: 'Error message'
-            },
-            error: {
-              type: 'string',
-              example: 'ERROR_CODE'
-            }
+            message: { type: 'string', example: 'Error message' },
+            error: { type: 'object', nullable: true }
           }
         },
         SignupInitiateRequest: {
           type: 'object',
           required: ['mobileNumber'],
           properties: {
-            mobileNumber: {
-              type: 'string',
-              example: '+1234567890',
-              description: 'Mobile number with country code'
-            }
+            mobileNumber: { type: 'string', example: '9589074989' }
           }
         },
-        SignupCompleteRequest: {
+        SignupVerifyRequest: {
           type: 'object',
-          required: ['mobileNumber', 'otp'],
+          required: ['mobileNumber', 'otp', 'verificationId'],
           properties: {
-            mobileNumber: {
-              type: 'string',
-              example: '+1234567890'
-            },
-            otp: {
-              type: 'string',
-              example: '123456',
-              description: '6-digit OTP received via SMS'
-            }
-//            ,password: {
-//              type: 'string',
-//              example: 'securePass123',
-//              minLength: 6,
-//              description: 'Password (minimum 6 characters)'
-//            }
-          }
-        },
-        SignupCompleteResponse: {
-          type: 'object',
-          properties: {
-            message: {
-              type: 'string',
-              example: 'User registered and onboarded successfully.'
-            },
-            user_id: {
-              type: 'string',
-              example: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'
-            },
-            mobile_number: {
-              type: 'string',
-              example: '+1234567890'
-            }
+            mobileNumber: { type: 'string', example: '9589074989' },
+            otp: { type: 'string', example: '5107' },
+            verificationId: { type: 'string', example: '3884691' }
           }
         },
         LoginInitiateRequest: {
           type: 'object',
           required: ['mobileNumber'],
           properties: {
-            mobileNumber: {
-              type: 'string',
-              example: '+1234567890'
-            }
+            mobileNumber: { type: 'string', example: '9589074989' }
           }
         },
-        LoginInitiateResponse: {
+        LoginVerifyRequest: {
           type: 'object',
+          required: ['mobileNumber', 'otp', 'verificationId'],
           properties: {
-            message: {
-              type: 'string',
-              example: 'OTP sent. Please verify to proceed to password entry.'
-            },
-            user_id: {
-              type: 'string',
-              example: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'
-            }
+            mobileNumber: { type: 'string', example: '9589074989' },
+            otp: { type: 'string', example: '7532' },
+            verificationId: { type: 'string', example: '3884726' }
           }
         },
-        LoginCompleteRequest: {
-          type: 'object',
-          required: ['mobileNumber', 'otp'],
-          properties: {
-            mobileNumber: {
-              type: 'string',
-              example: '+1234567890'
-            },
-            otp: {
-              type: 'string',
-              example: '123456'
-            }
-//            ,
-//            password: {
-//              type: 'string',
-//              example: 'securePass123'
-//            }
-          }
-        },
-        LoginCompleteResponse: {
+        AuthResponse: {
           type: 'object',
           properties: {
-            message: {
-              type: 'string',
-              example: 'Successfully logged in'
-            },
-            user_id: {
-              type: 'string',
-              example: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'
-            },
-            token: {
-              type: 'string',
-              example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
-            }
+            message: { type: 'string', example: 'Successfully authenticated' },
+            verificationId: { type: 'string', example: '3884726' },
+            token: { type: 'string', example: 'eyJhbGciOiJIUzI1Ni...' }
           }
         }
       }
-    },
-    tags: [
-      {
-        name: 'Authentication',
-        description: 'Authentication endpoints for signup and login'
-      }
-    ]
+    }
   },
-  apis: ['./routes/*.js', './server.js', './controllers/*.js'] // Path to the API files
+  apis: ['./server.js'] // Since JSDoc is in server.js
 };
 
-const swaggerSpec = swaggerJsdoc(options);
-
-module.exports = swaggerSpec;
-
+module.exports = swaggerJsdoc(options);
