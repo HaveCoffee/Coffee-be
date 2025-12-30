@@ -87,7 +87,7 @@ app.post('/api/auth/signup/init', authController.initiateSignup);
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/SignupCompleteRequest'
+ *             $ref: '#/components/schemas/SignupVerifyRequest'
  *     responses:
  *       201:
  *         description: User registered successfully
