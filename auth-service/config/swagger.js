@@ -1,5 +1,5 @@
 // config/swagger.js
-
+const path = require('path');
 const swaggerJsdoc = require('swagger-jsdoc');
 
 const options = {
@@ -90,7 +90,7 @@ const options = {
       }
     }
   },
-  apis: ['./server.js'] // Since JSDoc is in server.js
+  apis: [path.resolve(__dirname, '../server.js')]
 };
 
 module.exports = swaggerJsdoc(options);
