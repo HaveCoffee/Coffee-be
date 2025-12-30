@@ -153,7 +153,7 @@ app.post('/api/auth/login/init', authController.initiateLogin);
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/LoginCompleteRequest'
+ *             $ref: '#/components/schemas/LoginVerifyRequest'
  *     responses:
  *       200:
  *         description: Login successful
