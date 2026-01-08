@@ -10,6 +10,7 @@ require('dotenv').config({
 });
 
 const BASE_URL = 'https://cpaas.messagecentral.com';
+const isOtpVerificationEnabled = process.env.IS_OTP_VERIFICATION_ENABLED === 'false';
 
 /**
  * HELPER: Get VerifyNow Auth Token
@@ -42,6 +43,12 @@ const getVerifyNowToken = async () => {
  * HELPER: Send OTP via VerifyNow
  */
 const sendOtpHelper = async (mobileNumber) => {
+
+    if (!isOtpVerificationEnabled) {
+            console.log(`[DEV MODE] Skipping OTP send for ${mobileNumber}. Returning mock verificationId.`);
+            return { verificationId: 'MOCK_ID_12345' };
+        }
+
     const token = await getVerifyNowToken();
 
     const response = await axios.post(`${BASE_URL}/verification/v3/send`, null, {
@@ -65,6 +72,12 @@ const sendOtpHelper = async (mobileNumber) => {
  * HELPER: Check OTP via VerifyNow
  */
 const verifyOtpHelper = async (verificationId, code) => {
+
+    if (!isOtpVerificationEnabled) {
+            console.log(`[DEV MODE] Auto-verifying OTP: ${code} for ID: ${verificationId}`);
+            return true;
+        }
+
     try {
         const token = await getVerifyNowToken();
         const url = `${BASE_URL}/verification/v3/validateOtp`;
@@ -108,12 +121,11 @@ exports.initiateSignup = async (req, res) => {
         if (userCheck.rows.length > 0) {
             return res.status(409).json({ message: 'User already exists.' });
         }
-
         const verifyData = await sendOtpHelper(mobileNumber);
         res.status(200).json({
-            message: 'OTP sent successfully.',
+            message: isOtpVerificationEnabled ? 'OTP sent successfully.' : 'Dev mode: OTP bypassed.',
             verificationId: verifyData.verificationId
-        });
+         });
     } catch (error) {
         res.status(500).json({ message: 'Error sending OTP', error: error.message });
     }
@@ -143,13 +155,14 @@ exports.initiateLogin = async (req, res) => {
     const { mobileNumber } = req.body;
     try {
         const userCheck = await db.query('SELECT user_id FROM Users WHERE mobile_number = $1', [mobileNumber]);
+        console.log(userCheck.rows.length)
         if (userCheck.rows.length === 0) return res.status(404).json({ message: 'User not found.' });
 
         const verifyData = await sendOtpHelper(mobileNumber);
-        res.status(200).json({
-            message: 'OTP sent.',
-            verificationId: verifyData.verificationId
-        });
+                res.status(200).json({
+                    message: isOtpVerificationEnabled ? 'OTP sent.' : 'Dev mode: OTP bypassed.',
+                    verificationId: verifyData.verificationId
+                });
     } catch (error) {
         res.status(500).json({ message: 'Error initiating login' });
     }
@@ -164,7 +177,7 @@ exports.completeLogin = async (req, res) => {
         const result = await db.query('SELECT * FROM Users WHERE mobile_number = $1', [mobileNumber]);
         const user = result.rows[0];
 
-        const token = jwt.sign({ userId: user.user_id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const token = jwt.sign({ userId: user.user_id }, process.env.JWT_SECRET, { expiresIn: '48h' });
         res.status(200).json({ message: 'Logged in', token });
     } catch (error) {
         res.status(500).json({ message: 'Login failed' });
