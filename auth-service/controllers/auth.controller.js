@@ -147,11 +147,20 @@ exports.completeSignup = async (req, res) => {
         if (!isOtpValid) return res.status(400).json({ message: 'Invalid or expired OTP.' });
 
         let userId = crypto.randomBytes(16).toString('hex');
+
+        // UPDATED: Using "createdAt" and "updatedAt" as per final schema
+        const now = new Date();
         const result = await db.query(
-            'INSERT INTO Users (user_id, mobile_number) VALUES ($1, $2) RETURNING *',
-            [userId, mobileNumber]
+            `INSERT INTO users (user_id, mobile_number, "createdAt", "updatedAt")
+             VALUES ($1, $2, $3, $3)
+             RETURNING user_id, mobile_number, "createdAt", "updatedAt"`,
+            [userId, mobileNumber, now]
         );
-        res.status(201).json({ message: 'User onboarded', user: result.rows[0] });
+
+        res.status(201).json({
+            message: 'User onboarded',
+            user: result.rows[0] // contains userId, mobile_number, createdAt, updatedAt
+        });
     } catch (error) {
         res.status(500).json({ message: 'Signup failed', error: error.message });
     }
@@ -174,17 +183,38 @@ exports.initiateLogin = async (req, res) => {
 };
 
 exports.completeLogin = async (req, res) => {
-    const { mobileNumber, otp, verificationId } = req.body;
-    try {
-        const isOtpValid = await verifyOtpHelper(verificationId, otp);
-        if (!isOtpValid) return res.status(400).json({ message: 'Invalid OTP.' });
+     const { mobileNumber, otp, verificationId } = req.body;
+     try {
+         const isOtpValid = await verifyOtpHelper(verificationId, otp);
+         if (!isOtpValid) return res.status(400).json({ message: 'Invalid OTP.' });
 
-        const result = await db.query('SELECT * FROM Users WHERE mobile_number = $1', [mobileNumber]);
-        const user = result.rows[0];
+         // UPDATED: Standardizing on "updatedAt" naming
+         const updateResult = await db.query(
+             `UPDATE users
+              SET "updatedAt" = NOW()
+              WHERE mobile_number = $1
+              RETURNING user_id, mobile_number, "createdAt", "updatedAt"`,
+             [mobileNumber]
+         );
 
-        const token = jwt.sign({ userId: user.user_id }, process.env.JWT_SECRET, { expiresIn: '48h' });
-        res.status(200).json({ message: 'Logged in', token });
-    } catch (error) {
-        res.status(500).json({ message: 'Login failed' });
-    }
-};
+         const user = updateResult.rows[0];
+
+         const token = jwt.sign(
+             { userId: user.user_id },
+             process.env.JWT_SECRET,
+             { expiresIn: '48h' }
+         );
+
+         res.status(200).json({
+             message: 'Logged in',
+             token,
+             user: {
+                 userId: user.user_id,
+                 createdAt: user.createdAt,
+                 updatedAt: user.updatedAt
+             }
+         });
+     } catch (error) {
+         res.status(500).json({ message: 'Login failed', error: error.message });
+     }
+ };
